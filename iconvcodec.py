@@ -18,6 +18,9 @@ class Codec(codecs.Codec):
         self.decoder = iconv.open(unicodename,self.codeset)
         
     def encode(self, msg, errors = 'strict', reset=1, outlen=-1):
+        if not isinstance(msg, unicode):
+            msg = unicode(msg)
+        
         if reset:
             self.encoder.set_initial()
         try:
