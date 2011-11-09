@@ -3,11 +3,14 @@ import sys, iconv, codecs, errno
 # First we need to find out what the Unicode code set name is
 # in this iconv implementation
 
-if sys.platform.startswith("linux"):
-    unicodename = "unicode"+sys.byteorder
+if sys.platform.startswith("linux") or sys.platform.startswith("freebsd"):
+    byteorder = ['BE','LE'][sys.byteorder == 'little']
+    unicodename = "UCS-2" + byteorder
+    if sys.maxunicode == 1114111:
+        unicodename = "UCS-4" + byteorder
 else:
     # may need to try UCS-2, UCS-2-LE/BE, Unicode, ...
-    raise ImportError,"cannot establish name of 2-byte Unicode"
+    raise ImportError,"cannot establish name of Unicode type"
 
 class Codec(codecs.Codec):
     def __init__(self):
