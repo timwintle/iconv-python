@@ -43,6 +43,10 @@ Iconv_dealloc(IconvObject *self)
 	PyObject_Del(self);
 }
 
+static inline int python_unicode_width(void) {
+    return PyUnicode_GetMax() == 1114111 ? 4 : 2;
+}
+
 static char Iconv_iconv__doc__[]=
 "iconv(in[, outlen[, return_unicode[, count_only]]]) -> out\n"
 "Convert in to out. outlen is the size of the output buffer;\n"
@@ -51,6 +55,7 @@ static char Iconv_iconv__doc__[]=
 static PyObject*
 Iconv_iconv(IconvObject *self, PyObject *args, PyObject* kwargs)
 {
+    int unicode_width = python_unicode_width();
 	PyObject *inbuf_obj;
 	const char *inbuf;
 	char *outbuf;
@@ -95,40 +100,45 @@ Iconv_iconv(IconvObject *self, PyObject *args, PyObject* kwargs)
 		outbuf_size = outbuf_size_int;
 	}else if(return_unicode){
 		/* Allocate the result string. */
-		result = PyUnicode_FromUnicode(NULL, outbuf_size_int);
-		outbuf = (char*)PyUnicode_AS_UNICODE(result);
-		outbuf_size = outbuf_size_int*2;
+		outbuf_size = outbuf_size_int*unicode_width;
+		outbuf = malloc(outbuf_size);
 	}else{
 		/* Allocate the result string. */
-		result = PyString_FromStringAndSize(NULL, outbuf_size_int);
-		if (!result)
-			return NULL;
-		outbuf = PyString_AS_STRING(result);
 		outbuf_size = outbuf_size_int;
+		outbuf = malloc(outbuf_size);
 	}
+	
+	char *iconv_outbuf = outbuf;
 	/* Perform the conversion. */
-	iresult = iconv(self->handle, &inbuf, &inbuf_size, &outbuf, &outbuf_size);
+	iresult = iconv(self->handle, &inbuf, &inbuf_size, &iconv_outbuf, &outbuf_size);
+
+	if (iresult == -1){
+		PyObject *exc;
+		exc = PyObject_CallFunction(error,"siiO",
+					    strerror(errno),errno,
+					    inbuf_size_int - inbuf_size,
+					    Py_None);
+		if (outbuf != NULL) {
+		    free(outbuf);
+		}
+		PyErr_SetObject(error,exc);
+		return NULL;
+	}
+	
 	if (count_only){
 		result = PyInt_FromLong(outbuf_size_int-outbuf_size);
 	}else if (return_unicode) {
 		/* If the conversion was successful, the result string may be
 		   larger than necessary; outbuf_size will present the extra
 		   bytes. */
-		PyUnicode_Resize(&result, outbuf_size_int-outbuf_size/2);
+		result = PyUnicode_FromUnicode(outbuf, 
+		        outbuf_size_int-(outbuf_size/unicode_width));
+		free(outbuf);
 	}else{
-		_PyString_Resize(&result, outbuf_size_int-outbuf_size);
+		result = PyString_FromStringAndSize(outbuf, outbuf_size_int - outbuf_size);
+		free(outbuf);
 	}
-
-	if (iresult == -1){
-		PyObject *exc;
-		exc = PyObject_CallFunction(error,"siiO",
-					    strerror(errno),errno,
-					    inbuf_size_int - inbuf_size, 
-					    result);
-		Py_DECREF(result);
-		PyErr_SetObject(error,exc);
-		return NULL;
-	}
+	
 	return result;
 }
 
@@ -156,14 +166,18 @@ Iconv_set_initial(IconvObject *self, PyObject *args)
 		}
 		return PyString_FromString("");
 	}
-	result = PyString_FromStringAndSize(0, outbuf_size_int);
+	outbuf = malloc(outbuf_size_int);
+	char *iconv_outbuf = outbuf;
+	outbuf_size = outbuf_size_int;
+	iresult = iconv(self->handle, NULL, 0, &iconv_outbuf, &outbuf_size);
+
+	result = PyString_FromStringAndSize(iconv_outbuf,
+	                outbuf_size_int - outbuf_size);
+	
+	free(iconv_outbuf);
+	
 	if (!result)
 		return NULL;
-	outbuf_size = outbuf_size_int;
-	outbuf = PyString_AS_STRING(result);
-	iresult = iconv(self->handle, NULL, 0, &outbuf, &outbuf_size);
-			
-	_PyString_Resize(&result, outbuf_size_int - outbuf_size);
 
 	if (iresult == -1){
 		PyObject *exc;
