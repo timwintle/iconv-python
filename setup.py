@@ -13,9 +13,9 @@ if sys.platform.startswith('freebsd'):
 setup (name = "iconv",
        version = "1.1",
        description = "iconv-based Unicode converter",
-       author = "Martin v. Löwis",
-       author_email = "martin@v.loewis.de",
-       url = "http://sourceforge.net/projects/python-codecs/",
+       author = "Tim Wintle",
+       author_email = "timwintle@gmail.com",
+       url = "https://github.com/timwintle/iconv-python/",
        long_description =
 """The iconv module exposes the operating system's iconv character
 conversion routine to Python. This package provides an iconv wrapper
